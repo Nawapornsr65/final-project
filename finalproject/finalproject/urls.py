@@ -20,7 +20,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("speechtotext.urls")),   # <- เสียบ urls ของ app
+    path("", include("speechtotext.urls")),   # << เพิ่มบรรทัดนี้
 ]
-
 

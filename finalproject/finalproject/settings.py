@@ -65,7 +65,7 @@ ROOT_URLCONF = "finalproject.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],   # ปล่อยว่างไว้ Django จะไปหาใน templates/ ของแต่ละแอพเอง
+        "DIRS": [],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -77,6 +77,7 @@ TEMPLATES = [
         },
     },
 ]
+
 
 
 WSGI_APPLICATION = "finalproject.wsgi.application"

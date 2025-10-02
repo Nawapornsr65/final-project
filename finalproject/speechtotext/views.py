@@ -1,24 +1,39 @@
 import os
 import requests
+from dotenv import load_dotenv
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from dotenv import load_dotenv
+from django.shortcuts import render
 
-load_dotenv()  # โหลดค่าในไฟล์ .env
-HF_API_KEY = os.getenv("HF_API_KEY")  # ดึง Token
+# โหลดค่าใน .env
+load_dotenv()
+
+HF_API_KEY = os.getenv("HF_API_KEY")
+HF_MODEL = "biodatlab/whisper-th-large-v2"   # หรือเปลี่ยนเป็น thonburian/pathumma
+
+
+
+def index(request):
+    return render(request, "index.html")   # ← เปลี่ยนจาก "speechtotext/index.html"
+
+    # หรือถ้าไฟล์อยู่ใน speechtotext/templates/index.html
+    # return render(request, "index.html")
 
 @csrf_exempt
 def transcribe(request):
-    if request.method == "POST":
-        audio_file = request.FILES.get("audio")
-        if not audio_file:
-            return JsonResponse({"error": "No audio uploaded"}, status=400)
+    if request.method == "POST" and request.FILES.get("audio"):
+        audio_file = request.FILES["audio"]
 
+        headers = {"Authorization": f"Bearer {HF_API_KEY}"}
         response = requests.post(
-            "https://api-inference.huggingface.co/models/Thonburian/whisper-large-v3-th",
-            headers={"Authorization": f"Bearer {HF_API_KEY}"},
+            f"https://api-inference.huggingface.co/models/{HF_MODEL}",
+            headers=headers,
             data=audio_file.read()
         )
 
-        return JsonResponse(response.json())
-    return JsonResponse({"error": "Invalid request"}, status=400)
+        try:
+            return JsonResponse(response.json(), safe=False)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "No audio uploaded"}, status=400)
