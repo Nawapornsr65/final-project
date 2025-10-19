@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="th">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,7 +7,8 @@
   <style>
     :root{
       --violet:#5a54f7; --violet-600:#4c45d6; --violet-700:#3f39b8;
-      --bg:#f7f7fb; --card:#ffffff; --text:#111827; --muted:#6b7280; --radius:14px;
+      --bg:#eeeeF4;      /* มืดลงเล็กน้อยจากเดิม */
+      --card:#ffffff; --text:#111827; --muted:#6b7280; --radius:14px;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -128,8 +129,7 @@
       <!-- Upload -->
       <div class="upload-row">
         <div class="filebox" id="dropzone">
-          <!-- CHANGED: ขยายประเภทไฟล์ที่รองรับ -->
-          <input type="file" id="audioFile" accept="audio/*,.m4a,.mp3,.wav,.ogg" /><!-- CHANGED -->
+          <input type="file" id="audioFile" accept="audio/*,.m4a,.mp3,.wav,.ogg" />
           <button class="remove-file-btn" id="clearBtn" title="Remove file">×</button>
         </div>
         <button class="send-btn" id="sendBtn" title="Transcribe">Send</button>
@@ -202,7 +202,18 @@
     const downloadBtn=document.getElementById('downloadBtn');
     let fileObjectUrl=null;
 
-    function fmt(sec){ if(!isFinite(sec)) return '0:00'; const m=Math.floor(sec/60); const s=Math.floor(sec%60).toString().padStart(2,'0'); return `${m}:${s}`; }
+    function fmt(sec){
+      if(!isFinite(sec)) return '0:00';
+      const m=Math.floor(sec/60);
+      const s=Math.floor(sec%60).toString().padStart(2,'0');
+      return `${m}:${s}`;
+    }
+    function fmtMMSS(ms){
+      const s=Math.floor(ms/1000);
+      const m=Math.floor(s/60);
+      const r=s%60;
+      return `${m}:${String(r).padStart(2,'0')}`;
+    }
     function setStatus(msg){ statusEl.textContent=msg||''; }
 
     fileInput.addEventListener('change',()=>{ 
@@ -210,7 +221,7 @@
       if(fileInput.files[0]){ 
         fileObjectUrl=URL.createObjectURL(fileInput.files[0]); 
         audioEl.src=fileObjectUrl; 
-        setStatus(`Selected: ${fileInput.files[0].name}`); 
+        setStatus(`เลือกไฟล์: ${fileInput.files[0].name}`); 
       }
     });
     clearBtn.addEventListener('click',()=>{ 
@@ -253,7 +264,12 @@
     });
     backBtn.addEventListener('click',()=>{ if(audioEl.duration){ audioEl.currentTime=Math.max(audioEl.currentTime-10,0); }});
     skipBtn.addEventListener('click',()=>{ if(audioEl.duration){ audioEl.currentTime=Math.min(audioEl.currentTime+10,audioEl.duration); }});
-    volSlider.addEventListener('input',()=>{ audioEl.volume=+volSlider.value; const muted=audioEl.volume===0; volOn.style.display= muted? 'none':'block'; volOff.style.display= muted? 'block':'none'; });
+    volSlider.addEventListener('input',()=>{ 
+      audioEl.volume=+volSlider.value; 
+      const muted=audioEl.volume===0; 
+      volOn.style.display= muted? 'none':'block'; 
+      volOff.style.display= muted? 'block':'none'; 
+    });
     muteBtn.addEventListener('click',()=>{ 
       if(audioEl.muted || audioEl.volume===0){ 
         audioEl.muted=false; 
@@ -276,39 +292,60 @@
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); 
     });
 
-    // 🟣 Call Django API
+    // 🔴 มีตัวจับเวลาเดียว: แสดงใน statusEl เท่านั้น
     sendBtn.addEventListener('click', async ()=> {
-      if(!fileInput.files[0]){ setStatus('Please choose a file first.'); return; }
-      setStatus('Uploading & transcribing…');
+      if(!fileInput.files[0]){ setStatus('โปรดเลือกไฟล์ก่อน'); return; }
+
+      let start = Date.now();
+      setStatus('กำลังอัปโหลดและถอดเสียง… (0:00)');
+      const timer = setInterval(()=>{
+        const ms = Date.now() - start;
+        statusEl.textContent = `กำลังอัปโหลดและถอดเสียง… (${fmtMMSS(ms)})`;
+      }, 500);
+
       const formData=new FormData();
-      formData.append("file", fileInput.files[0]);              // CHANGED: ใช้ชื่อฟิลด์ 'file' ให้ตรง backend
+      formData.append("file", fileInput.files[0]);
 
       try{
-        // CHANGED: ใช้ endpoint ตาม urls.py ของ Django
-        const res = await fetch("/api/speech-to-text/", {       // CHANGED
-          method: "POST",
-          body: formData
-          // ถ้าเปิด CSRF: เพิ่ม headers { "X-CSRFToken": getCookie("csrftoken") }
-        });
+        const res = await fetch("/api/speech-to-text/", { method: "POST", body: formData });
+        const raw = await res.text();
+        let data;
+        try { data = JSON.parse(raw); } catch { data = null; }
 
-        // CHANGED: รองรับ response ที่ไม่ใช่ JSON 100% (ปลอดภัยขึ้น)
-        const raw = await res.text();                           // CHANGED
-        try {
-          const data = JSON.parse(raw);                         // CHANGED
-          // ถ้า API คืน text ก็แสดงเฉพาะข้อความให้อ่านง่าย
-          if (data && data.text) {
-            output.value = data.text;                           // CHANGED
-          } else {
-            output.value = JSON.stringify(data, null, 2);       // CHANGED
-          }
-          setStatus(res.ok ? 'Done ✅' : `Error (${res.status})`);
-        } catch(parseErr){
-          output.value = "Invalid JSON:\n" + raw;               // CHANGED
-          setStatus(`Error (${res.status})`);
+        clearInterval(timer);
+
+        if(!res.ok || !data){
+          output.value = data ? JSON.stringify(data, null, 2) : raw;
+          setStatus(`เกิดข้อผิดพลาด (${res.status})`);
+          return;
         }
+
+        // แสดงผล: ถ้ามี segments (พร้อม speaker) จะจัดรูปแบบให้อ่านง่าย
+        const segs = Array.isArray(data.segments) ? data.segments : [];
+        if(segs.length){
+          const lines = segs.map(seg=>{
+            const spk = seg.speaker ? `ผู้พูดคนที่ ${seg.speaker}: ` : '';
+            return `${spk}${seg.text}`;
+          });
+          output.value = lines.join('\n');
+        }else if(data.text){
+          output.value = data.text;
+        }else{
+          output.value = JSON.stringify(data, null, 2);
+        }
+
+        // เวลา: ใช้ seconds_spent จาก backend ถ้ามี / ไม่มีก็ใช้ client timer
+        const sec = (typeof data.seconds_spent==='number' && isFinite(data.seconds_spent))
+          ? data.seconds_spent
+          : Math.round((Date.now()-start)/1000);
+
+        const mm = Math.floor(sec/60), ss = String(Math.round(sec%60)).padStart(2,'0');
+        const diarFlag = data.diarization_enabled ? 'เปิด' : 'ปิด';
+        setStatus(`เสร็จแล้ว (${mm}:${ss}) • Diarization: ${diarFlag}`);
       }catch(e){
+        clearInterval(timer);
         console.error(e);
-        setStatus('Error calling API');
+        setStatus('เรียก API ไม่สำเร็จ');
       }
     });
   </script>
